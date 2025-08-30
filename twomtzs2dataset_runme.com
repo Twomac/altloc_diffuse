@@ -427,6 +427,7 @@ wait
 
 combine:
 set Ncells = `awk '$2=="xtal:"{print $3}' render_spots_00001.log | awk -F "x" '{print $1*$2*$3}'`
+echo "mosaic domain of Bragg rendering was $Ncells x larger than that of diffuse rendering; compensating"
 set scale2 = `echo $diffuse_scale $Ncells | awk '{print $1*$2}'`
 #set scale = `echo $xtal_scale $overall_scale | awk '{print $1*$2}'`
 
