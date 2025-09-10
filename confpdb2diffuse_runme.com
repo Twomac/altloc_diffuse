@@ -240,7 +240,7 @@ endif
 set hklop = `head -n $op ${t}symop_hkl.txt | tail -n 1 | awk '{print $NF}'`
 
 echo "applying $hklop"
-echo reindex $hklop | reindex hklin ${t}diffuse_1.mtz hklout ${t}diffuse_${op}.mtz & >> $logfile
+echo reindex $hklop | reindex hklin ${t}diffuse_1.mtz hklout ${t}diffuse_${op}.mtz >> $logfile &
 #cad hklin1 ${t}reindexed.mtz hklout ${t}diffuse_${op}.mtz << EOF >> $logfile
 #labin file 1 all
 #EOF
@@ -304,5 +304,23 @@ ls -l $outfile
 
 exit
 
+##############################
+#  notes on remediating mtz files to fit into sftools
+#
+set reso = 1.65
 
+foreach mtz ( ../asu_*.mtz )
+
+set num = `echo $mtz | awk -F "_" '{print $2+0}'`
+
+echo "labin file 1 all\nresolution over_all $reso" | cad hklin1 $mtz hklout ../lores_${num}.mtz | grep HKLOUT &
+
+end
+wait
+
+foreach mtz ( ../asu_*.mtz )
+
+set num = `echo $mtz | awk -F "_" '{print $2+0}'`
+
+end
 
