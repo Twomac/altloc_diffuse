@@ -8,6 +8,7 @@ set mtzs = ( )
 set tempdir = /dev/shm/${USER}/temp_$$_mtzsum/
 set outfile = sum.mtz
 set debug = 0
+set slow = 0
 
 # cluster stuff
 set srun = "auto"
@@ -47,6 +48,11 @@ if( $#mtzs < 1 ) then
     goto exit
 endif
 
+if( $slow ) then
+    set srun = ""
+    set tempdir = .
+    set debug = 9
+endif
 
 # cannot migrate hosts because of temp files
 if( "$srun" == "auto" ) then
@@ -176,6 +182,29 @@ eof
 EOF
 chmod a+x ${t}mergemtz.csh
 
+
+if( ! $slow ) goto parallel
+
+set i = 0
+while ( $i <= $#mtzs )
+  @ i = ( $i + 1 )
+  echo "relabeling $mtzs[$i] -> ${t}mtz${i}.mtz"
+  ${t}oddmtz_round1.csh $mtzs[$i] ${t}mtz${i}.mtz >! ${t}relabel${i}.log
+end
+  echo "adding $mtzs[1] to ${t}sum.mtz"
+cp ${t}mtz1.mtz ${t}sum.mtz
+set i = 1
+while ( $i <= $#mtzs )
+  @ i = ( $i + 1 )
+  echo "adding $mtzs[$i] to ${t}sum.mtz"
+  ${t}mergemtz.csh ${t}mtz${i}.mtz ${t}sum.mtz ${t}sum.mtz >! ${t}sum${i}.log
+end
+cp ${t}sum.mtz $outfile
+
+goto exit
+
+
+parallel:
 unset done
 # round of pairwise mergings
 set r = 0

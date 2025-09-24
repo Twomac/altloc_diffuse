@@ -121,7 +121,8 @@ if(! -e "$braggmtz" || ! -e "$diffusemtz" ) then
     goto exit
 endif
 
-if( $fast > 4 ) then
+if( $fast > 99 ) then
+    echo "fast > 99 so switching to fast-rendering nanoBragg settings"
 
     set dispersion = 0
     set horizontal_divergence = 0
@@ -296,7 +297,7 @@ CELL $bigCELL
 MISSET $missets
 EOF
 
-if( $fast > 1 && -e background.bin ) goto skipbg
+if( $fast > 9 && -e background.bin ) goto skipbg
 
 echo "generating background: air: $background_air_thickness mm, water: $background_water_thickness mm"
 # make the water background.  Only need to do this once
@@ -358,13 +359,14 @@ if(-e ${outprefix}_${num}.cbf && $fast > 10 ) then
    echo "${outprefix}_${num}.cbf already exists."
    continue
 endif
-if($fast > 1 && -e sum_${num}.bin) continue
-if($fast > 1 && -e osc_spots_${num}.bin ) continue
+
+if($fast > 10 && -e fullsum_${num}.bin) continue
+if($fast > 2 && -e osc_spots_${num}.bin ) continue
 
 echo -n "rendering image $n spots : "
 
 set hkl = "-hkl Bragg.hkl"
-if( $fast > 3 && -e Fdump.bin ) set hkl = ""
+if( $fast > 0 && -e Fdump.bin ) set hkl = ""
 rm -f osc_spots_${num}.bin >& /dev/null
 $srungpu nanoBragg$CUDA $hkl -dump Fdump.bin \
     -mat Abragg.mat -tophat_spots -nonoise -nopgm \
@@ -398,13 +400,13 @@ if(-e ${outprefix}_${num}.cbf && $fast > 10 ) then
    echo "${outprefix}_${num}.cbf already exists."
    continue
 endif
-if($fast > 1 && -e sumbg_${num}.bin) continue
-if($fast > 1 && -e diffuse_${num}.bin ) continue
+if($fast > 10 && -e fullsum_${num}.bin) continue
+if($fast > 2 && -e diffuse_${num}.bin ) continue
 
 echo -n "rendering image $n diffuse : "
 
 set hkl = "-hkl sqrt_ds.hkl"
-if( $fast > 3 && -e DSdump.bin ) set hkl = ""
+if( $fast > 0 && -e DSdump.bin ) set hkl = ""
 #setenv OMP_NUM_THREADS 1
 rm -f diffuse_${num}.bin >& /dev/null
 $sruncpu nanoBragg $hkl -N 1 -dump DSdump.bin \
@@ -425,6 +427,7 @@ wait
 
 combine:
 set Ncells = `awk '$2=="xtal:"{print $3}' render_spots_00001.log | awk -F "x" '{print $1*$2*$3}'`
+echo "mosaic domain of Bragg rendering was $Ncells x larger than that of diffuse rendering; compensating"
 set scale2 = `echo $diffuse_scale $Ncells | awk '{print $1*$2}'`
 #set scale = `echo $xtal_scale $overall_scale | awk '{print $1*$2}'`
 
@@ -440,32 +443,32 @@ if( ! -e diffuse_${num}.bin ) then
     set BAD = "failed to render diffuse scatter for $num with ./nanoBragg"
     goto exit
 endif
-if($fast > 1 && -e sum1_${num}.bin) continue
+if($fast > 10 && -e bdsum_${num}.bin) continue
 
 $sruncpu float_add -nostats -scale1 $spot_scale osc_spots_${num}.bin \
-          -scale2 $scale2 diffuse_${num}.bin -outfile sum1_${num}.bin >&! sum1_${num}.log &
+          -scale2 $scale2 diffuse_${num}.bin -outfile bdsum_${num}.bin >&! bdsum_${num}.log &
 end
-echo "waiting for sum1 ..."
+echo "waiting for bdsum ..."
 wait
 
 echo "summing with background"
 foreach n ( `seq 1 $nframes` )
 set num = `echo $n | awk '{printf("%05d",$1)}'`
 
-if( ! -e sum1_${num}.bin ) then
-    set BAD = "failed to combine float images with float_add at sum1 "
+if( ! -e bdsum_${num}.bin ) then
+    set BAD = "failed to combine float images with float_add at Bragg-Diffuse sum "
     goto exit
 endif
-if($fast > 1 && -e sumbg_${num}.bin) continue
+if($fast > 11 && -e fullsum_${num}.bin) continue
 
-$sruncpu float_add -nostats -scale1 $xtal_scale sum1_${num}.bin \
-          -scale2 1 background.bin -outfile sumbg_${num}.bin >&! sumbg_${num}.log &
+$sruncpu float_add -nostats -scale1 $xtal_scale bdsum_${num}.bin \
+          -scale2 1 background.bin -outfile fullsum_${num}.bin >&! fullsum_${num}.log &
 end
-echo "waiting for sumbg ..."
+echo "waiting for fullsum ..."
 wait
 
 
-if( ! -e sumbg_${num}.bin ) then
+if( ! -e fullsum_${num}.bin ) then
     set BAD = "failed to combine float images with background using float_add"
     goto exit
 endif
@@ -477,17 +480,17 @@ echo "noise "
 foreach n ( `seq 1 $nframes` )
 set num = `echo $n | awk '{printf("%05d",$1)}'`
 
-if( ! -e sumbg_${num}.bin ) then
+if( ! -e fullsum_${num}.bin ) then
     set BAD = "failed to combine summed float images with float_add"
     goto exit
 endif
-if($fast > 1 && -e noisy_${num}.img) continue
+if($fast > 12 && -e noisy_${num}.img) continue
 
 set thisseed = `echo $seed $num | awk '{print $1+$2}'`
 $sruncpu noisify -seed $thisseed -scale $overall_scale \
     -detpixels_f 2463 -detpixels_s 2527 -pixel 0.172 -distance $distance \
     -phi $phi -osc $osc \
-    -floatfile sumbg_${num}.bin -nopgm -intfile /dev/null \
+    -floatfile fullsum_${num}.bin -nopgm -intfile /dev/null \
     -bits 32 -adc_offset 0 -noiseimage noisy_${num}.img >&! noisify_${num}.log &
 
 end
